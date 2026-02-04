@@ -12,6 +12,13 @@ import {
     deletarTransacao,
     fecharBanco,
 } from "./db.js";
+import http from "http";
+
+// Isso serve apenas para o Render não dar erro de "Port timeout"
+http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Bot Online");
+}).listen(process.env.PORT || 8080);
 
 const bot = new Bot(process.env.BOT_TOKEN!);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
