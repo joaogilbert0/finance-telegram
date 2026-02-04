@@ -42,14 +42,17 @@ export async function buscarTransacoesDoMes(mes: number, ano: number) {
      WHERE EXTRACT(YEAR FROM data) = $1 AND EXTRACT(MONTH FROM data) = $2`,
         [ano, parseInt(mesFormatado)],
     );
-    return result.rows;
+    return result.rows.map((row: any) => ({
+        ...row,
+        valor: parseFloat(row.valor),
+    }));
 }
 
 export async function buscarSaldoTotal() {
     const result = await pool.query(
         "SELECT SUM(valor) as total FROM transacoes",
     );
-    return result.rows[0]?.total || 0;
+    return parseFloat(result.rows[0]?.total) || 0;
 }
 
 export async function buscarUltimaTransacao() {
