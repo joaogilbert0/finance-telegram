@@ -215,19 +215,6 @@ O bot utiliza **PostgreSQL** (via Supabase em produção) com a seguinte estrutu
 - **Groq LLaMA 3.3 70B**: IA para classificação inteligente
 - **Chart.js**: Visualização de dados profissional
 
-## 🌐 Variáveis de Ambiente
-
-```env
-# Token do bot (obtenha com @BotFather no Telegram)
-BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
-
-# Chave da API Groq (obtenha em console.groq.com)
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# PostgreSQL Connection String (Supabase ou local)
-DATABASE_URL=postgresql://user:password@host:5432/database
-```
-
 ## 🚨 Troubleshooting
 
 ### Erro de conexão com PostgreSQL
