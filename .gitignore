@@ -1,0 +1,58 @@
+# Variáveis de ambiente (segredos)
+.env
+.env.local
+.env.*.local
+
+# Dependências
+node_modules/
+
+# Arquivos compilados TypeScript
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+dist/
+build/
+
+# Banco de dados local (SQLite - se ainda existir)
+*.db
+*.db-shm
+*.db-wal
+financeiro.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Testes
+coverage/
+.nyc_output/
+
+# Temporários
+tmp/
+temp/
+*.tmp
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache

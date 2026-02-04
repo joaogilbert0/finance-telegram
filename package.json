@@ -1,0 +1,27 @@
+{
+    "name": "mybottelegram",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "module",
+    "devDependencies": {
+        "@types/better-sqlite3": "^7.6.13",
+        "@types/node": "^25.2.0",
+        "@types/pg": "^8.16.0",
+        "typescript": "^5.9.3"
+    },
+    "dependencies": {
+        "chartjs-node-canvas": "^5.0.0",
+        "chartjs-plugin-datalabels": "^2.2.0",
+        "dotenv": "^17.2.3",
+        "grammy": "^1.39.3",
+        "groq-sdk": "^0.37.0",
+        "pg": "^8.18.0"
+    }
+}
