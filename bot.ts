@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Bot, InputFile } from "grammy";
+import { Bot, InputFile, webhookCallback } from "grammy";
 import Groq from "groq-sdk";
 import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import ChartDataLabels from "chartjs-plugin-datalabels";
@@ -13,12 +13,6 @@ import {
     fecharBanco,
 } from "./db.js";
 import http from "http";
-
-// Isso serve apenas para o Render não dar erro de "Port timeout"
-http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("Bot Online");
-}).listen(process.env.PORT || 8080);
 
 const bot = new Bot(process.env.BOT_TOKEN!);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -339,18 +333,92 @@ bot.hears(regexFinanceiro, async (ctx) => {
     await ctx.reply(mensagem);
 });
 
+// Inicializa o banco de dados
 initDb().then(() => console.log("Banco de dados pronto!"));
 
-bot.start();
+// === WEBHOOK SETUP ===
+const PORT = process.env.PORT || 8080;
+const WEBHOOK_URL = process.env.WEBHOOK_URL; // Ex: https://seu-app.onrender.com
 
-process.on("SIGINT", async () => {
-    console.log("\n🛑 Encerrando bot...");
-    await fecharBanco();
-    process.exit(0);
-});
+if (WEBHOOK_URL) {
+    // Modo WEBHOOK (para produção no Render)
+    console.log("🌐 Iniciando bot em modo WEBHOOK...");
 
-process.on("SIGTERM", async () => {
-    console.log("\n🛑 Encerrando bot...");
-    await fecharBanco();
-    process.exit(0);
-});
+    // Configura o webhook
+    bot.api.setWebhook(`${WEBHOOK_URL}/webhook`).then(() => {
+        console.log(`✅ Webhook configurado: ${WEBHOOK_URL}/webhook`);
+    });
+
+    // Cria servidor HTTP
+    const server = http.createServer(async (req, res) => {
+        if (req.url === "/webhook" && req.method === "POST") {
+            // Processa updates do Telegram
+            try {
+                let body = "";
+                req.on("data", (chunk) => {
+                    body += chunk.toString();
+                });
+                req.on("end", async () => {
+                    try {
+                        const update = JSON.parse(body);
+                        await bot.handleUpdate(update);
+                        res.writeHead(200);
+                        res.end("OK");
+                    } catch (error) {
+                        console.error("Erro ao processar update:", error);
+                        res.writeHead(500);
+                        res.end("Error");
+                    }
+                });
+            } catch (error) {
+                console.error("Erro no webhook:", error);
+                res.writeHead(500);
+                res.end("Error");
+            }
+        } else if (req.url === "/" || req.url === "/health") {
+            // Endpoint de health check
+            res.writeHead(200, { "Content-Type": "text/plain" });
+            res.end("Bot Online ✅");
+        } else {
+            res.writeHead(404);
+            res.end("Not Found");
+        }
+    });
+
+    server.listen(PORT, () => {
+        console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    });
+
+    // Graceful shutdown
+    process.on("SIGINT", async () => {
+        console.log("\n🛑 Encerrando bot...");
+        await bot.api.deleteWebhook();
+        await fecharBanco();
+        server.close();
+        process.exit(0);
+    });
+
+    process.on("SIGTERM", async () => {
+        console.log("\n🛑 Encerrando bot...");
+        await bot.api.deleteWebhook();
+        await fecharBanco();
+        server.close();
+        process.exit(0);
+    });
+} else {
+    // Modo POLLING (para desenvolvimento local)
+    console.log("🔄 Iniciando bot em modo POLLING...");
+    bot.start();
+
+    process.on("SIGINT", async () => {
+        console.log("\n🛑 Encerrando bot...");
+        await fecharBanco();
+        process.exit(0);
+    });
+
+    process.on("SIGTERM", async () => {
+        console.log("\n🛑 Encerrando bot...");
+        await fecharBanco();
+        process.exit(0);
+    });
+}

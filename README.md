@@ -43,7 +43,7 @@ Bot inteligente para controle financeiro pessoal com classificação automática
 
 #### 1. Clone e instale dependências
 ```bash
-git clone https://github.com/seu-usuario/MyBotTelegram.git
+git clone https://github.com/joaogilbert0/MyBotTelegram.git
 cd MyBotTelegram
 npm install
 ```
@@ -54,16 +54,17 @@ Crie um arquivo `.env` na raiz do projeto:
 BOT_TOKEN=seu_token_do_botfather
 GROQ_API_KEY=sua_chave_groq
 DATABASE_URL=postgresql://usuario:senha@localhost:5432/financeiro
+# WEBHOOK_URL não é necessário em desenvolvimento local (usa polling)
 ```
 
 #### 3. Compile o TypeScript
 ```bash
-npx tsc
+npm run build
 ```
 
 #### 4. Execute o bot
 ```bash
-node bot.js
+npm start
 ```
 
 ### Deploy em Produção (Render + Supabase)
@@ -78,17 +79,41 @@ node bot.js
 1. Acesse [render.com](https://render.com) e conecte seu repositório GitHub
 2. Crie um novo **Web Service**
 3. Configure:
-   - **Build Command**: `npm install && npx tsc`
-   - **Start Command**: `node bot.js`
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
 4. Adicione as variáveis de ambiente:
    - `BOT_TOKEN`: Token do BotFather
    - `GROQ_API_KEY`: Chave da API Groq
    - `DATABASE_URL`: Connection string do Supabase
+   - **`WEBHOOK_URL`**: `https://SEU-APP.onrender.com` (substitua pelo nome real do seu app)
 
 #### 3. Deploy Automático
 - Cada push na branch `main` fará deploy automático
 - O Render executará graceful shutdown ao reiniciar (SIGTERM)
 - O banco PostgreSQL do Supabase é persistente
+
+### 🌐 Webhooks vs Polling
+
+O bot suporta dois modos de operação:
+
+#### 🔄 **Polling (Desenvolvimento Local)**
+- Bot fica constantemente perguntando ao Telegram por novas mensagens
+- Usado quando `WEBHOOK_URL` **não está definido**
+- ✅ Ideal para desenvolvimento local
+- ❌ Não funciona bem no plano gratuito do Render (serviço hiberna)
+
+#### 🌐 **Webhooks (Produção no Render)**
+- Telegram chama seu servidor apenas quando há mensagens
+- Usado quando `WEBHOOK_URL` **está definido**
+- ✅ Compatível com plano gratuito do Render
+- ✅ Mais eficiente e econômico
+- ⚠️ Primeira mensagem após inatividade pode demorar ~50s (servidor acordando)
+
+**Importante para o Plano Gratuito do Render:**
+- O plano gratuito coloca o serviço em "sleep" após 15 minutos de inatividade
+- Com webhooks, o Telegram acorda o serviço automaticamente quando você manda mensagem
+- A primeira interação após o "sleep" demora mais, mas as próximas são rápidas
+- **Sem webhooks, o bot não funcionará no plano gratuito!**
 
 ## 📦 Dependências
 
@@ -202,7 +227,8 @@ O bot utiliza **PostgreSQL** (via Supabase em produção) com a seguinte estrutu
 - O saldo acumulado considera todas as transações (entradas e saídas)
 - A classificação por IA funciona em português e entende contexto
 - Todas as operações de banco são **async/await** (PostgreSQL)
-- O bot usa **long polling** do Grammy (compatível com Render)
+- **Modo automático**: O bot detecta se deve usar polling (local) ou webhooks (produção) baseado na variável `WEBHOOK_URL`
+- **Plano gratuito do Render**: Requer webhooks para funcionar corretamente
 
 ## 🛠️ Stack Tecnológica
 
@@ -226,6 +252,9 @@ O bot utiliza **PostgreSQL** (via Supabase em produção) com a seguinte estrutu
 - Verifique se o `BOT_TOKEN` está correto
 - Teste o token: `curl https://api.telegram.org/bot<TOKEN>/getMe`
 - Verifique os logs no Render
+- **No Render**: Confirme que a variável `WEBHOOK_URL` está configurada
+- **Plano gratuito**: A primeira mensagem após inatividade pode demorar 50+ segundos (serviço acordando)
+- Verifique se o webhook está ativo: `curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo`
 
 ### IA não classifica corretamente
 - Verifique se `GROQ_API_KEY` está configurada
