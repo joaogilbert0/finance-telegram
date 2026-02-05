@@ -17,6 +17,13 @@ import http from "http";
 const bot = new Bot(process.env.BOT_TOKEN!);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+// Configurar lista de comandos que aparece quando o usuário digita '/'
+bot.api.setMyCommands([
+    { command: "start", description: "🚀 Iniciar bot e ver instruções" },
+    { command: "balanco", description: "📊 Ver balanço mensal e gráfico" },
+    { command: "delete", description: "🗑️ Deletar última transação" },
+]);
+
 // Configuração do Chart.js
 const chartJSNodeCanvas = new ChartJSNodeCanvas({
     width: 800,
@@ -25,6 +32,26 @@ const chartJSNodeCanvas = new ChartJSNodeCanvas({
     plugins: {
         modern: [ChartDataLabels],
     },
+});
+
+bot.command("start", async (ctx) => {
+    const nomeUsuario = ctx.from?.first_name || "👋";
+    await ctx.reply(
+        `Olá, ${nomeUsuario}! 👋\n\n` +
+            `🤖 *Sou seu assistente financeiro pessoal!*\n\n` +
+            `📝 *Como usar:*\n\n` +
+            `💸 *Registrar gastos:*\n` +
+            `   • Digite: \`-50 Pizza\`\n` +
+            `   • Digite: \`-120.50 Gasolina\`\n\n` +
+            `💰 *Registrar entradas:*\n` +
+            `   • Digite: \`+3000 Salário\`\n` +
+            `   • Digite: \`+500 Freelance\`\n\n` +
+            `🔍 *Comandos disponíveis:*\n` +
+            `/balanco - Ver balanço mensal completo com gráfico\n` +
+            `/delete - Deletar última transação registrada\n\n` +
+            `✨ A IA classifica automaticamente seus gastos por categoria!`,
+        { parse_mode: "Markdown" },
+    );
 });
 
 function obterIconeCategoria(categoria: string): string {
