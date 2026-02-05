@@ -367,85 +367,96 @@ initDb().then(() => console.log("Banco de dados pronto!"));
 const PORT = process.env.PORT || 8080;
 const WEBHOOK_URL = process.env.WEBHOOK_URL; // Ex: https://seu-app.onrender.com
 
-if (WEBHOOK_URL) {
-    // Modo WEBHOOK (para produção no Render)
-    console.log("🌐 Iniciando bot em modo WEBHOOK...");
+async function iniciarBot() {
+    if (WEBHOOK_URL) {
+        // Modo WEBHOOK (para produção no Render)
+        console.log("🌐 Iniciando bot em modo WEBHOOK...");
 
-    // Configura o webhook
-    bot.api.setWebhook(`${WEBHOOK_URL}/webhook`).then(() => {
+        // IMPORTANTE: Inicializa o bot ANTES de configurar webhook e receber updates
+        await bot.init();
+        console.log("✅ Bot inicializado");
+
+        // Configura o webhook
+        await bot.api.setWebhook(`${WEBHOOK_URL}/webhook`);
         console.log(`✅ Webhook configurado: ${WEBHOOK_URL}/webhook`);
-    });
 
-    // Cria servidor HTTP
-    const server = http.createServer(async (req, res) => {
-        if (req.url === "/webhook" && req.method === "POST") {
-            // Processa updates do Telegram
-            try {
-                let body = "";
-                req.on("data", (chunk) => {
-                    body += chunk.toString();
-                });
-                req.on("end", async () => {
-                    try {
-                        const update = JSON.parse(body);
-                        await bot.handleUpdate(update);
-                        res.writeHead(200);
-                        res.end("OK");
-                    } catch (error) {
-                        console.error("Erro ao processar update:", error);
-                        res.writeHead(500);
-                        res.end("Error");
-                    }
-                });
-            } catch (error) {
-                console.error("Erro no webhook:", error);
-                res.writeHead(500);
-                res.end("Error");
+        // Cria servidor HTTP
+        const server = http.createServer(async (req, res) => {
+            if (req.url === "/webhook" && req.method === "POST") {
+                // Processa updates do Telegram
+                try {
+                    let body = "";
+                    req.on("data", (chunk) => {
+                        body += chunk.toString();
+                    });
+                    req.on("end", async () => {
+                        try {
+                            const update = JSON.parse(body);
+                            await bot.handleUpdate(update);
+                            res.writeHead(200);
+                            res.end("OK");
+                        } catch (error) {
+                            console.error("Erro ao processar update:", error);
+                            res.writeHead(500);
+                            res.end("Error");
+                        }
+                    });
+                } catch (error) {
+                    console.error("Erro no webhook:", error);
+                    res.writeHead(500);
+                    res.end("Error");
+                }
+            } else if (req.url === "/" || req.url === "/health") {
+                // Endpoint de health check
+                res.writeHead(200, { "Content-Type": "text/plain" });
+                res.end("Bot Online ✅");
+            } else {
+                res.writeHead(404);
+                res.end("Not Found");
             }
-        } else if (req.url === "/" || req.url === "/health") {
-            // Endpoint de health check
-            res.writeHead(200, { "Content-Type": "text/plain" });
-            res.end("Bot Online ✅");
-        } else {
-            res.writeHead(404);
-            res.end("Not Found");
-        }
-    });
+        });
 
-    server.listen(PORT, () => {
-        console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    });
+        server.listen(PORT, () => {
+            console.log(`🚀 Servidor rodando na porta ${PORT}`);
+        });
 
-    // Graceful shutdown
-    process.on("SIGINT", async () => {
-        console.log("\n🛑 Encerrando bot...");
-        await bot.api.deleteWebhook();
-        await fecharBanco();
-        server.close();
-        process.exit(0);
-    });
+        // Graceful shutdown
+        process.on("SIGINT", async () => {
+            console.log("\n🛑 Encerrando bot...");
+            await bot.api.deleteWebhook();
+            await fecharBanco();
+            server.close();
+            process.exit(0);
+        });
 
-    process.on("SIGTERM", async () => {
-        console.log("\n🛑 Encerrando bot...");
-        await bot.api.deleteWebhook();
-        await fecharBanco();
-        server.close();
-        process.exit(0);
-    });
-} else {
-    // Modo POLLING (para desenvolvimento local)
-    console.log("🔄 Iniciando bot em modo POLLING...");
-    bot.start();
+        process.on("SIGTERM", async () => {
+            console.log("\n🛑 Encerrando bot...");
+            await bot.api.deleteWebhook();
+            await fecharBanco();
+            server.close();
+            process.exit(0);
+        });
+    } else {
+        // Modo POLLING (para desenvolvimento local)
+        console.log("🔄 Iniciando bot em modo POLLING...");
+        bot.start();
 
-    process.on("SIGINT", async () => {
-        console.log("\n🛑 Encerrando bot...");
-        await fecharBanco();
-        process.exit(0);
-    });
+        process.on("SIGINT", async () => {
+            console.log("\n🛑 Encerrando bot...");
+            await fecharBanco();
+            process.exit(0);
+        });
 
-    process.on("SIGTERM", async () => {
-        console.log("\n🛑 Encerrando bot...");
-        await fecharBanco();
-        process.exit(0);
-    });
+        process.on("SIGTERM", async () => {
+            console.log("\n🛑 Encerrando bot...");
+            await fecharBanco();
+            process.exit(0);
+        });
+    }
 }
+
+// Inicia o bot
+iniciarBot().catch((error) => {
+    console.error("❌ Erro ao iniciar bot:", error);
+    process.exit(1);
+});
