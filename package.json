@@ -5,7 +5,8 @@
     "main": "index.js",
     "scripts": {
         "build": "tsc",
-        "start": "node dist/bot.js"
+        "start": "node dist/bot.js",
+        "dev": "node --env-file=.env.local dist/bot.js"
     },
     "keywords": [],
     "author": "",

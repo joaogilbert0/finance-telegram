@@ -8,6 +8,7 @@ import {
     adicionarTransacao,
     buscarTransacoesDoMes,
     buscarSaldoTotal,
+    buscarSaldoCredito,
     buscarUltimaTransacao,
     deletarTransacao,
     fecharBanco,
@@ -40,12 +41,19 @@ bot.command("start", async (ctx) => {
         `Olá, ${nomeUsuario}! 👋\n\n` +
             `🤖 *Sou seu assistente financeiro pessoal!*\n\n` +
             `📝 *Como usar:*\n\n` +
-            `💸 *Registrar gastos:*\n` +
-            `   • Digite: \`-50 Pizza\`\n` +
-            `   • Digite: \`-120.50 Gasolina\`\n\n` +
+            `💸 *Registrar gastos no débito:*\n` +
+            `   • Digite: \`-50 Pizza d\` ou \`-50 Pizza debito\`\n` +
+            `   • Digite: \`-120.50 Gasolina d\`\n\n` +
+            `💳 *Registrar gastos no crédito:*\n` +
+            `   • Digite: \`-200 Restaurante c\` ou \`-200 Restaurante credito\`\n` +
+            `   • Digite: \`-89.90 Netflix c\`\n\n` +
             `💰 *Registrar entradas:*\n` +
             `   • Digite: \`+3000 Salário\`\n` +
             `   • Digite: \`+500 Freelance\`\n\n` +
+            `ℹ️ *Como funciona:*\n` +
+            `   • Gastos no débito: descontam do seu saldo\n` +
+            `   • Gastos no crédito: aparecem no balanço mas não afetam o saldo\n` +
+            `   • Se não especificar, será débito por padrão\n\n` +
             `🔍 *Comandos disponíveis:*\n` +
             `/balanco - Ver balanço mensal completo com gráfico\n` +
             `/delete - Deletar última transação registrada\n\n` +
@@ -57,6 +65,7 @@ bot.command("start", async (ctx) => {
 function obterIconeCategoria(categoria: string): string {
     const icones: Record<string, string> = {
         Alimentação: "🍔",
+        Supermercado: "🛒",
         Transporte: "🚗",
         Lazer: "🎮",
         Saúde: "💊",
@@ -77,7 +86,7 @@ async function classificarGastoComGroq(item: string): Promise<string> {
             messages: [
                 {
                     role: "system",
-                    content: `Classifique em: [Alimentação, Transporte, Lazer, Saúde, Educação, Contas, Roupas/Beleza, Salário, Investimentos, Outros]. Responda APENAS a categoria.`,
+                    content: `Classifique em: [Alimentação, Supermercado, Transporte, Lazer, Saúde, Educação, Contas, Roupas/Beleza, Salário, Investimentos, Outros]. Responda APENAS a categoria.`,
                 },
                 { role: "user", content: item },
             ],
@@ -101,7 +110,7 @@ bot.command("balanco", async (ctx) => {
         return ctx.reply("📭 Nenhuma transação registrada neste mês.");
     }
 
-    // 2. Agrupa por Categoria (Lógica JS continua útil aqui)
+    // 2. Agrupa por Categoria e Meio de Pagamento
     const porCategoria = transacoesMes.reduce(
         (acc: Record<string, number>, t: any) => {
             if (!acc[t.categoria]) acc[t.categoria] = 0;
@@ -109,6 +118,20 @@ bot.command("balanco", async (ctx) => {
             return acc;
         },
         {} as Record<string, number>,
+    );
+
+    // Agrupa gastos por meio de pagamento
+    const gastosPorMeio = transacoesMes.reduce(
+        (acc: Record<string, Record<string, number>>, t: any) => {
+            if (t.valor < 0) { // Apenas gastos (negativos)
+                const meio = t.meio_pagamento || 'debito';
+                if (!acc[meio]) acc[meio] = {};
+                if (!acc[meio][t.categoria]) acc[meio][t.categoria] = 0;
+                acc[meio][t.categoria] += Math.abs(t.valor);
+            }
+            return acc;
+        },
+        {} as Record<string, Record<string, number>>,
     );
 
     // Separa entradas e saídas
@@ -135,21 +158,35 @@ bot.command("balanco", async (ctx) => {
         relatorio += "\n";
     }
 
-    if (Object.keys(saidas).length > 0) {
-        relatorio += `❤️ *SAÍDAS:*\n`;
-        for (const [cat, valor] of Object.entries(saidas)) {
+    // Mostra gastos separados por débito e crédito
+    if (gastosPorMeio.debito && Object.keys(gastosPorMeio.debito).length > 0) {
+        relatorio += `💸 *GASTOS NO DÉBITO:*\n`;
+        for (const [cat, valor] of Object.entries(gastosPorMeio.debito)) {
             const icone = obterIconeCategoria(cat);
             relatorio += `${icone} *${cat}:* R$ -${valor.toFixed(2)}\n`;
         }
+        relatorio += "\n";
     }
 
-    // 4. Saldo Total (Geral, não só do mês)
-    const saldoTotal = await buscarSaldoTotal();
-    relatorio += `\n💰 *Saldo Acumulado: R$ ${saldoTotal.toFixed(2)}*`;
+    if (gastosPorMeio.credito && Object.keys(gastosPorMeio.credito).length > 0) {
+        relatorio += `💳 *GASTOS NO CRÉDITO:*\n`;
+        for (const [cat, valor] of Object.entries(gastosPorMeio.credito)) {
+            const icone = obterIconeCategoria(cat);
+            relatorio += `${icone} *${cat}:* R$ -${valor.toFixed(2)}\n`;
+        }
+        relatorio += "\n";
+    }
+
+    // 4. Saldos
+    const saldoDebito = await buscarSaldoTotal();
+    const saldoCredito = await buscarSaldoCredito();
+    
+    relatorio += `💰 *Saldo em Conta (Débito): R$ ${saldoDebito.toFixed(2)}*\n`;
+    relatorio += `💳 *Fatura do Crédito: R$ ${Math.abs(saldoCredito).toFixed(2)}*`;
 
     await ctx.reply(relatorio, { parse_mode: "Markdown" });
 
-    // 5. Gera e envia gráfico de pizza
+    // 5. Gera e envia gráfico de pizza (todos os gastos)
     if (Object.keys(saidas).length > 0) {
         try {
             const labels = Object.keys(saidas);
@@ -251,30 +288,36 @@ bot.command("delete", async (ctx) => {
     const icone = obterIconeCategoria(ultimaTransacao.categoria);
     const valor = Math.abs(ultimaTransacao.valor);
     const tipo = ultimaTransacao.valor > 0 ? "entrada" : "saída";
+    const meio = ultimaTransacao.meio_pagamento === 'credito' ? '💳 Crédito' : '💸 Débito';
 
     // Deleta a transação
     await deletarTransacao(ultimaTransacao.id);
 
-    // Busca saldo atualizado
-    const saldoAtualizado = await buscarSaldoTotal();
+    // Busca saldos atualizados
+    const saldoDebito = await buscarSaldoTotal();
+    const saldoCredito = await buscarSaldoCredito();
 
     await ctx.reply(
         `🗑️ *Transação deletada com sucesso!*\n\n` +
             `${icone} ${ultimaTransacao.categoria}: R$ ${tipo === "entrada" ? "+" : "-"}${valor.toFixed(2)}\n` +
-            `📝 ${ultimaTransacao.descricao}\n\n` +
-            `💰 Novo saldo: R$ ${saldoAtualizado.toFixed(2)}`,
+            `📝 ${ultimaTransacao.descricao}\n` +
+            `${tipo === "saída" ? meio : ""}\n\n` +
+            `💰 Saldo em conta: R$ ${saldoDebito.toFixed(2)}\n` +
+            `💳 Fatura do crédito: R$ ${Math.abs(saldoCredito).toFixed(2)}`,
         { parse_mode: "Markdown" },
     );
 });
 
 // --- OUVINTE DE MENSAGENS ---
-const regexFinanceiro = /^([+-]?\d+(?:[.,]\d+)?)\s+(.+)$/;
+// Regex atualizado para aceitar 'd', 'debito', 'c', 'credito' no final (opcional)
+const regexFinanceiro = /^([+-]?\d+(?:[.,]\d+)?)\s+(.+?)(?:\s+(d|debito|c|credito))?$/i;
 
 bot.hears(regexFinanceiro, async (ctx) => {
     await ctx.replyWithChatAction("typing");
 
     const rawNumber = ctx.match![1]!.replace(",", ".");
-    const descricao = ctx.match![2]!;
+    const descricao = ctx.match![2]!.trim();
+    const meioPagamentoInput = ctx.match![3]?.toLowerCase() || 'd'; // Padrão é débito
 
     let valor = parseFloat(rawNumber);
     const isEntrada = rawNumber.includes("+");
@@ -283,15 +326,22 @@ bot.hears(regexFinanceiro, async (ctx) => {
         valor = -Math.abs(valor);
     }
 
+    // Determina o meio de pagamento
+    let meioPagamento = 'debito';
+    if (meioPagamentoInput === 'c' || meioPagamentoInput === 'credito') {
+        meioPagamento = 'credito';
+    }
+
     const categoria = isEntrada
         ? "Salário"
         : await classificarGastoComGroq(descricao);
 
-    // --- AQUI A MUDANÇA: SALVA NO BANCO ---
-    await adicionarTransacao(descricao, categoria, valor);
+    // --- SALVA NO BANCO COM MEIO DE PAGAMENTO ---
+    await adicionarTransacao(descricao, categoria, valor, meioPagamento);
 
-    // Busca saldo atualizado direto do banco
-    const saldoAtual = await buscarSaldoTotal();
+    // Busca saldos atualizados direto do banco
+    const saldoDebito = await buscarSaldoTotal();
+    const saldoCredito = await buscarSaldoCredito();
 
     // Formatar data
     const agora = new Date();
@@ -334,14 +384,17 @@ bot.hears(regexFinanceiro, async (ctx) => {
     ).getDate();
     const diasRestantes = ultimoDiaMes - agora.getDate() + 1;
 
-    // Calcular saldo diário
-    const saldoDiario = diasRestantes > 0 ? saldoAtual / diasRestantes : 0;
+    // Calcular saldo diário (apenas do débito)
+    const saldoDiario = diasRestantes > 0 ? saldoDebito / diasRestantes : 0;
 
     // Obter nome do usuário
     const nomeUsuario = ctx.from?.first_name || "Você";
 
     // Obter ícone da categoria
     const icone = obterIconeCategoria(categoria);
+
+    // Emoji do meio de pagamento
+    const emojiMeio = meioPagamento === 'credito' ? '💳' : '💸';
 
     // Montar mensagem
     let mensagem = "";
@@ -350,11 +403,13 @@ bot.hears(regexFinanceiro, async (ctx) => {
         mensagem = `${nomeUsuario} received ${Math.abs(valor).toFixed(2)} BRL in ${icone} ${categoria}\n`;
     } else {
         mensagem = `${nomeUsuario} spent ${Math.abs(valor).toFixed(2)} BRL on ${icone} ${categoria}\n`;
+        mensagem += `${emojiMeio} Payment: ${meioPagamento === 'credito' ? 'Credit Card' : 'Debit'}\n`;
     }
 
     mensagem += `${dataFormatada}\n\n`;
     mensagem += `${descricao}\n\n`;
-    mensagem += `👛 Remaining ${mes} balance is ${saldoAtual.toFixed(2)} BRL (~${saldoDiario.toFixed(2)} BRL per day)\n`;
+    mensagem += `💰 Account balance: ${saldoDebito.toFixed(2)} BRL (~${saldoDiario.toFixed(2)} BRL per day)\n`;
+    mensagem += `💳 Credit card bill: ${Math.abs(saldoCredito).toFixed(2)} BRL\n`;
     mensagem += `Send /balanco to see detailed balance.`;
 
     await ctx.reply(mensagem);

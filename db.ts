@@ -19,8 +19,22 @@ export async function initDb() {
         descricao TEXT NOT NULL,
         categoria TEXT NOT NULL,
         valor DECIMAL(10, 2) NOT NULL,
-        tipo TEXT NOT NULL
+        tipo TEXT NOT NULL,
+        meio_pagamento TEXT DEFAULT 'debito'
       )
+    `);
+        
+        // Adiciona a coluna meio_pagamento se ela não existir (para bancos existentes)
+        await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='transacoes' AND column_name='meio_pagamento'
+        ) THEN
+          ALTER TABLE transacoes ADD COLUMN meio_pagamento TEXT DEFAULT 'debito';
+        END IF;
+      END $$;
     `);
     } finally {
         client.release();
@@ -31,11 +45,12 @@ export async function adicionarTransacao(
     descricao: string,
     categoria: string,
     valor: number,
+    meioPagamento: string = 'debito',
 ) {
     const tipo = valor > 0 ? "Entrada" : "Saída";
     await pool.query(
-        "INSERT INTO transacoes (data, descricao, categoria, valor, tipo) VALUES ($1, $2, $3, $4, $5)",
-        [new Date(), descricao, categoria, valor, tipo],
+        "INSERT INTO transacoes (data, descricao, categoria, valor, tipo, meio_pagamento) VALUES ($1, $2, $3, $4, $5, $6)",
+        [new Date(), descricao, categoria, valor, tipo, meioPagamento],
     );
 }
 
@@ -43,7 +58,8 @@ export async function buscarTransacoesDoMes(mes: number, ano: number) {
     const mesFormatado = (mes + 1).toString().padStart(2, "0");
     const result = await pool.query(
         `SELECT * FROM transacoes
-     WHERE EXTRACT(YEAR FROM data) = $1 AND EXTRACT(MONTH FROM data) = $2`,
+     WHERE EXTRACT(YEAR FROM data) = $1 AND EXTRACT(MONTH FROM data) = $2
+     ORDER BY data DESC`,
         [ano, parseInt(mesFormatado)],
     );
     return result.rows.map((row: any) => ({
@@ -53,8 +69,17 @@ export async function buscarTransacoesDoMes(mes: number, ano: number) {
 }
 
 export async function buscarSaldoTotal() {
+    // Saldo total considera apenas débito e entradas
     const result = await pool.query(
-        "SELECT SUM(valor) as total FROM transacoes",
+        "SELECT SUM(valor) as total FROM transacoes WHERE meio_pagamento = 'debito' OR tipo = 'Entrada'",
+    );
+    return parseFloat(result.rows[0]?.total) || 0;
+}
+
+export async function buscarSaldoCredito() {
+    // Total gasto no crédito (valores negativos)
+    const result = await pool.query(
+        "SELECT SUM(valor) as total FROM transacoes WHERE meio_pagamento = 'credito'",
     );
     return parseFloat(result.rows[0]?.total) || 0;
 }
